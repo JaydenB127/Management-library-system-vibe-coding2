@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="vi" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Quản lý Thư viện</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { colors: { primary: '#1e40af' } } } }</script>
+    <style>
+        .modal-bg { background-color: rgba(0,0,0,0.5); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div id="app"></div>
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+    <div id="modal-container"></div>
+    <script>
+        // --- DATA & STATE ---
+        const DB_KEY = 'lib_sys_data';
+        let state = {
+            users: [], docGia: [], chuyenNganh: [], dauSach: [], banSao: [], phieuMuon: [],
+            currentUser: null, currentView: 'login', darkMode: false
+        };
+
+        const defaultData = {
+            users: [
+                { maNV: 'NV001', hoTen: 'Admin', username: 'admin', password: 'admin123', role: 'admin', ngaySinh: '1990-01-01', soDienThoai: '0123456789', email: 'admin@lib.edu.vn', trangThai: 'active' },
+                { maNV: 'NV002', hoTen: 'Thủ thư 1', username: 'thuthu1', password: '123456', role: 'thuthu', ngaySinh: '1995-05-05', soDienThoai: '0987654321', email: 'tt1@lib.edu.vn', trangThai: 'active' }
+            ],
+            docGia: [
+                { maDocGia: 'DG001', hoTen: 'Nguyễn Văn A', lop: 'K60-CNTT', ngaySinh: '2000-01-01', gioiTinh: 'Nam', email: 'nva@student.edu.vn', soDienThoai: '0912345678', ngayDangKy: '2023-09-01', trangThai: 'active' },
+                { maDocGia: 'DG002', hoTen: 'Trần Thị B', lop: 'K61-KT', ngaySinh: '2001-02-02', gioiTinh: 'Nữ', email: 'ttb@student.edu.vn', soDienThoai: '0923456789', ngayDangKy: '2023-09-05', trangThai: 'active' }
+            ],
+            chuyenNganh: [
+                { maChuyenNganh: 'CN001', tenChuyenNganh: 'Công nghệ thông tin', moTa: 'Sách về máy tính, lập trình' },
+                { maChuyenNganh: 'CN002', tenChuyenNganh: 'Kinh tế', moTa: 'Sách về quản trị, tài chính' }
+            ],
+            dauSach: [
+                { maDauSach: 'DS001', tenDauSach: 'Cấu trúc dữ liệu và giải thuật', tacGia: 'Nguyễn Văn C', nhaXuatBan: 'NXB Giáo dục', soTrang: 300, kichThuoc: '14x20 cm', maChuyenNganh: 'CN001', soLuong: 2, namXuatBan: 2020, moTa: 'Sách cơ bản về CTDL' },
+                { maDauSach: 'DS002', tenDauSach: 'Kinh tế vĩ mô', tacGia: 'Trần Văn D', nhaXuatBan: 'NXB Kinh tế', soTrang: 250, kichThuoc: '14x20 cm', maChuyenNganh: 'CN002', soLuong: 1, namXuatBan: 2021, moTa: 'Sách kinh tế' }
+            ],
+            banSao: [
+                { maBanSao: 'BS001', maDauSach: 'DS001', tinhTrang: 'Có sẵn', ngayNhap: '2023-01-01', ghiChu: '' },
+                { maBanSao: 'BS002', maDauSach: 'DS001', tinhTrang: 'Đang mượn', ngayNhap: '2023-01-01', ghiChu: '' },
+                { maBanSao: 'BS003', maDauSach: 'DS002', tinhTrang: 'Có sẵn', ngayNhap: '2023-02-01', ghiChu: '' }
+            ],
+            phieuMuon: [
+                { maPhieuMuon: 'PM001', maBanSao: 'BS002', maDocGia: 'DG001', maNV: 'NV002', ngayMuon: '2023-10-01', ngayHenTra: '2023-10-15', ngayTraThuc: null, tinhTrang: 'Trả trễ', ghiChu: '' }
+            ]
+        };
+
+        function loadData() {
+            const saved = localStorage.getItem(DB_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                state = { ...state, ...parsed };
+            } else {
+                state = { ...state, ...defaultData };
+                saveData();
+            }
+            const dm = localStorage.getItem('lib_dark_mode');
+            if (dm !== null) state.darkMode = dm === 'true';
+            applyDarkMode();
+        }
+
+        function saveData() {
+            updateBookAvailability();
+            const { currentUser, currentView, darkMode, ...dataToSave } = state;
+            localStorage.setItem(DB_KEY, JSON.stringify(dataToSave));
+        }
+
+        function updateBookAvailability() {
+            state.dauSach.forEach(ds => {
+                ds.soLuong = state.banSao.filter(bs => bs.maDauSach === ds.maDauSach && bs.tinhTrang === 'Có sẵn').length;
+            });
+        }
+
+        // --- UTILS ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = { success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500' };
+            toast.className = `toast-enter ${colors[type]} text-white px-4 py-2 rounded shadow-lg flex items-center gap-2`;
+            toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'exclamation-triangle'}"></i> <span>${message}</span>`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => { toast.classList.remove('toast-enter'); toast.classList.add('toast-enter-active'); });
+            setTimeout(() => {
+                toast.classList.remove('toast-enter-active'); toast.classList.add('toast-exit-active');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function toggleDarkMode() {
+            state.darkMode = !state.darkMode;
+            localStorage.setItem('lib_dark_mode', state.darkMode);
+            applyDarkMode();
+        }
+
+        function applyDarkMode() {
+            if (state.darkMode) document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+        }
+
+        function confirmDialog(message, onConfirm) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 modal-bg flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full">
+                    <h3 class="text-lg font-bold mb-4">Xác nhận</h3>
+                    <p class="mb-6">${message}</p>
+                    <div class="flex justify-end gap-2">
+                        <button class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600" onclick="this.closest('.fixed').remove()">Hủy</button>
+                        <button class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700" id="confirm-btn">Đồng ý</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-container').appendChild(modal);
+            modal.querySelector('#confirm-btn').onclick = () => { onConfirm(); modal.remove(); };
+        }
+
+        function render(view) {
+            state.currentView = view;
+            const app = document.getElementById('app');
+            if (!state.currentUser && view !== 'login') { render('login'); return; }
+            if (view === 'login') app.innerHTML = renderLogin();
+            else app.innerHTML = renderLayout(renderViewContent(view));
+            attachEvents(view);
+        }
+
+        function generateId(prefix, array, idField) {
+            if (array.length === 0) return `${prefix}001`;
+            const maxId = Math.max(...array.map(item => parseInt(item[idField].replace(prefix, '')) || 0));
+            return `${prefix}${(maxId + 1).toString().padStart(3, '0')}`;
+        }
+
+        // --- VIEWS ---
+        function renderLogin() {
+            return `
+                <div class="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+                    <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md">
+                        <div class="text-center mb-8">
+                            <i class="fas fa-book-reader text-4xl text-primary mb-2"></i>
+                            <h2 class="text-2xl font-bold">Hệ thống Quản lý Thư viện</h2>
+                        </div>
+                        <form id="login-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Tên đăng nhập</label>
+                                <input type="text" id="username" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Mật khẩu</label>
+                                <div class="relative">
+                                    <input type="password" id="password" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required>
+                                    <button type="button" onclick="const p = document.getElementById('password'); p.type = p.type === 'password' ? 'text' : 'password';" class="absolute right-3 top-2.5 text-gray-500">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-primary text-white py-2 rounded hover:bg-blue-800 transition">Đăng nhập</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLayout(content) {
+            const isAdmin = state.currentUser.role === 'admin';
+            return `
+                <nav class="bg-primary text-white shadow-md">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center gap-4">
+                                <i class="fas fa-book-reader text-2xl"></i>
+                                <span class="font-bold text-xl hidden sm:block">Thư viện ĐH</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <button onclick="toggleDarkMode()" class="p-2 rounded hover:bg-blue-800"><i class="fas ${state.darkMode ? 'fa-sun' : 'fa-moon'}"></i></button>
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-user-circle text-xl"></i>
+                                    <span>${state.currentUser.hoTen}</span>
+                                </div>
+                                <button onclick="logout()" class="p-2 rounded hover:bg-blue-800" title="Đăng xuất"><i class="fas fa-sign-out-alt"></i></button>
+                            </div>
+                        </div>
+                    </nav>
+                </div>
+                <div class="flex flex-1 overflow-hidden">
+                    <aside class="w-64 bg-white dark:bg-gray-800 shadow-md overflow-y-auto hidden md:block">
+                        <div class="p-4 space-y-2">
+                            ${renderNavItem('dashboard', 'Trang chủ', 'fa-home')}
+                            ${renderNavItem('docgia', 'Quản lý Độc giả', 'fa-users')}
+                            ${renderNavItem('chuyennganh', 'Chuyên ngành', 'fa-tags')}
+                            ${renderNavItem('sach', 'Quản lý Sách', 'fa-book')}
+                            ${renderNavItem('muontra', 'Mượn / Trả sách', 'fa-exchange-alt')}
+                            ${renderNavItem('baocao', 'Báo cáo Thống kê', 'fa-chart-bar')}
+                            ${isAdmin ? renderNavItem('users', 'Quản lý Người dùng', 'fa-user-cog') : ''}
+                        </div>
+                    </aside>
+                    <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
+                        ${content}
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderNavItem(view, label, icon) {
+            const active = state.currentView === view ? 'bg-blue-50 dark:bg-gray-700 text-primary dark:text-blue-400 font-semibold' : 'hover:bg-gray-100 dark:hover:bg-gray-700';
+            return `<a href="#" onclick="render('${view}')" class="flex items-center gap-3 px-4 py-3 rounded-lg transition ${active}"><i class="fas ${icon} w-5"></i> ${label}</a>`;
+        }
+
+        function logout() {
+            state.currentUser = null;
+            render('login');
+        }
+
+        function renderViewContent(view) {
+            switch(view) {
+                case 'dashboard': return renderDashboard();
+                case 'docgia': return renderDocGia();
+                case 'chuyennganh': return renderChuyenNganh();
+                case 'sach': return renderSach();
+                case 'muontra': return renderMuonTra();
+                case 'baocao': return renderBaoCao();
+                case 'users': return renderUsers();
+                default: return '<h2>Không tìm thấy trang</h2>';
+            }
+        }
+
+        function attachEvents(view) {
+            if (view === 'login') {
+                document.getElementById('login-form').onsubmit = (e) => {
+                    e.preventDefault();
+                    const u = document.getElementById('username').value;
+                    const p = document.getElementById('password').value;
+                    const user = state.users.find(x => x.username === u && x.password === p && x.trangThai === 'active');
+                    if (user) {
+                        state.currentUser = user;
+                        showToast('Đăng nhập thành công');
+                        render('dashboard');
+                    } else {
+                        showToast('Sai tên đăng nhập hoặc mật khẩu', 'error');
+                    }
+                };
+            }
+            if (view === 'dashboard') initDashboardCharts();
+            if (view === 'docgia') initDocGiaEvents();
+            if (view === 'chuyennganh') initChuyenNganhEvents();
+            if (view === 'sach') initSachEvents();
+            if (view === 'muontra') initMuonTraEvents();
+            if (view === 'baocao') initBaoCaoEvents();
+            if (view === 'users') initUsersEvents();
+        }
+
+        function renderDashboard() {
+            const totalBooks = state.dauSach.length;
+            const totalCopies = state.banSao.length;
+            const totalReaders = state.docGia.length;
+            const openBorrows = state.phieuMuon.filter(p => p.tinhTrang === 'Đang mượn' || p.tinhTrang === 'Trả trễ').length;
+            const overdue = state.phieuMuon.filter(p => p.tinhTrang === 'Trả trễ' || (p.tinhTrang === 'Đang mượn' && new Date(p.ngayHenTra) < new Date())).length;
+            const available = state.banSao.filter(b => b.tinhTrang === 'Có sẵn').length;
+
+            return `
+                <h2 class="text-2xl font-bold mb-6">Tổng quan hệ thống</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    ${renderStatCard('Tổng đầu sách', totalBooks, 'fa-book', 'bg-blue-100 text-blue-600')}
+                    ${renderStatCard('Tổng bản sao', totalCopies, 'fa-copy', 'bg-indigo-100 text-indigo-600')}
+                    ${renderStatCard('Tổng độc giả', totalReaders, 'fa-users', 'bg-green-100 text-green-600')}
+                    ${renderStatCard('Đang mượn', openBorrows, 'fa-hand-holding', 'bg-yellow-100 text-yellow-600')}
+                    ${renderStatCard('Quá hạn', overdue, 'fa-exclamation-triangle', 'bg-red-100 text-red-600')}
+                    ${renderStatCard('Sách có sẵn', available, 'fa-check-circle', 'bg-teal-100 text-teal-600')}
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                        <h3 class="text-lg font-bold mb-4">Hoạt động gần đây</h3>
+                        <div class="space-y-4">
+                            ${state.phieuMuon.slice(-5).reverse().map(p => {
+                                const dg = state.docGia.find(d => d.maDocGia === p.maDocGia)?.hoTen || p.maDocGia;
+                                const bs = state.banSao.find(b => b.maBanSao === p.maBanSao);
+                                const ds = bs ? state.dauSach.find(d => d.maDauSach === bs.maDauSach)?.tenDauSach : p.maBanSao;
+                                return `
+                                    <div class="flex justify-between items-center border-b dark:border-gray-700 pb-2">
+                                        <div><p class="font-medium">${dg}</p><p class="text-sm text-gray-500">${ds}</p></div>
+                                        <span class="text-sm ${p.tinhTrang === 'Đã trả' ? 'text-green-500' : 'text-blue-500'}">${p.tinhTrang}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                        <h3 class="text-lg font-bold mb-4">Thao tác nhanh</h3>
+                        <div class="flex flex-col gap-3">
+                            <button onclick="render('muontra')" class="bg-primary text-white py-2 rounded hover:bg-blue-800">Mượn / Trả sách</button>
+                            <button onclick="render('docgia')" class="bg-green-600 text-white py-2 rounded hover:bg-green-700">Thêm độc giả</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStatCard(title, value, icon, colorClass) {
+            return `
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center gap-4">
+                    <div class="p-4 rounded-full ${colorClass}"><i class="fas ${icon} text-2xl"></i></div>
+                    <div><p class="text-gray-500 dark:text-gray-400 text-sm">${title}</p><p class="text-2xl font-bold">${value}</p></div>
+                </div>
+            `;
+        }
+
+        function initDashboardCharts() {}
+
+        function renderDocGia() {
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Quản lý Độc giả</h2>
+                    <button onclick="openModal('docgia-modal')" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-800"><i class="fas fa-plus mr-2"></i>Thêm độc giả</button>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6">
+                    <input type="text" id="search-docgia" placeholder="Tìm kiếm theo tên, mã, lớp..." class="w-full md:w-1/3 px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" oninput="filterDocGia()">
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600">
+                                <th class="p-3">Mã</th><th class="p-3">Họ tên</th><th class="p-3">Lớp</th><th class="p-3">SĐT</th><th class="p-3">Trạng thái</th><th class="p-3">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docgia-tbody"></tbody>
+                    </table>
+                </div>
+                ${renderDocGiaModal()}
+            `;
+        }
+
+        function renderDocGiaModal() {
+            return `
+                <div id="docgia-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 class="text-lg font-bold mb-4" id="docgia-modal-title">Thêm độc giả</h3>
+                        <form id="docgia-form" class="space-y-4">
+                            <input type="hidden" id="dg-id">
+                            <div><label class="block text-sm mb-1">Họ tên</label><input type="text" id="dg-name" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Lớp</label><input type="text" id="dg-class" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Ngày sinh</label><input type="date" id="dg-dob" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div>
+                                <label class="block text-sm mb-1">Giới tính</label>
+                                <select id="dg-gender" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"><option>Nam</option><option>Nữ</option></select>
+                            </div>
+                            <div><label class="block text-sm mb-1">SĐT</label><input type="tel" id="dg-phone" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Email</label><input type="email" id="dg-email" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div>
+                                <label class="block text-sm mb-1">Trạng thái</label>
+                                <select id="dg-status" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"><option value="active">Hoạt động</option><option value="inactive">Khóa</option></select>
+                            </div>
+                            <div class="flex justify-end gap-2 mt-6">
+                                <button type="button" onclick="closeModal('docgia-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button>
+                                <button type="submit" class="px-4 py-2 bg-primary text-white rounded">Lưu</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initDocGiaEvents() {
+            filterDocGia();
+            document.getElementById('docgia-form').onsubmit = (e) => {
+                e.preventDefault();
+                const id = document.getElementById('dg-id').value;
+                const data = {
+                    hoTen: document.getElementById('dg-name').value, lop: document.getElementById('dg-class').value,
+                    ngaySinh: document.getElementById('dg-dob').value, gioiTinh: document.getElementById('dg-gender').value,
+                    soDienThoai: document.getElementById('dg-phone').value, email: document.getElementById('dg-email').value,
+                    trangThai: document.getElementById('dg-status').value
+                };
+                if (id) {
+                    const idx = state.docGia.findIndex(d => d.maDocGia === id);
+                    state.docGia[idx] = { ...state.docGia[idx], ...data };
+                    showToast('Cập nhật thành công');
+                } else {
+                    data.maDocGia = generateId('DG', state.docGia, 'maDocGia');
+                    data.ngayDangKy = new Date().toISOString().split('T')[0];
+                    state.docGia.push(data);
+                    showToast('Thêm thành công');
+                }
+                saveData(); closeModal('docgia-modal'); filterDocGia();
+            };
+        }
+
+        function filterDocGia() {
+            const q = document.getElementById('search-docgia')?.value.toLowerCase() || '';
+            const tbody = document.getElementById('docgia-tbody');
+            if (!tbody) return;
+            const filtered = state.docGia.filter(d => d.hoTen.toLowerCase().includes(q) || d.maDocGia.toLowerCase().includes(q) || d.lop.toLowerCase().includes(q));
+            tbody.innerHTML = filtered.map(d => `
+                <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="p-3">${d.maDocGia}</td><td class="p-3">${d.hoTen}</td><td class="p-3">${d.lop}</td><td class="p-3">${d.soDienThoai}</td>
+                    <td class="p-3"><span class="px-2 py-1 rounded text-xs ${d.trangThai === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${d.trangThai === 'active' ? 'Hoạt động' : 'Khóa'}</span></td>
+                    <td class="p-3">
+                        <button onclick="editDocGia('${d.maDocGia}')" class="text-blue-500 hover:text-blue-700 mr-2"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteDocGia('${d.maDocGia}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function editDocGia(id) {
+            const d = state.docGia.find(x => x.maDocGia === id);
+            document.getElementById('docgia-modal-title').innerText = 'Sửa độc giả';
+            document.getElementById('dg-id').value = d.maDocGia;
+            document.getElementById('dg-name').value = d.hoTen;
+            document.getElementById('dg-class').value = d.lop;
+            document.getElementById('dg-dob').value = d.ngaySinh;
+            document.getElementById('dg-gender').value = d.gioiTinh;
+            document.getElementById('dg-phone').value = d.soDienThoai;
+            document.getElementById('dg-email').value = d.email;
+            document.getElementById('dg-status').value = d.trangThai;
+            openModal('docgia-modal');
+        }
+
+        function deleteDocGia(id) {
+            const hasBorrows = state.phieuMuon.some(p => p.maDocGia === id && p.tinhTrang !== 'Đã trả');
+            if (hasBorrows) return showToast('Không thể xóa độc giả đang mượn sách', 'error');
+            confirmDialog('Bạn có chắc muốn xóa độc giả này?', () => {
+                state.docGia = state.docGia.filter(d => d.maDocGia !== id);
+                saveData(); filterDocGia(); showToast('Đã xóa độc giả');
+            });
+        }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).querySelector('form')?.reset(); document.getElementById(id).querySelector('input[type="hidden"]')?.setAttribute('value', ''); }
+
+        function renderChuyenNganh() {
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Chuyên ngành</h2>
+                    <button onclick="openModal('cn-modal')" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-800"><i class="fas fa-plus mr-2"></i>Thêm</button>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-3">Mã</th><th class="p-3">Tên</th><th class="p-3">Mô tả</th><th class="p-3">Số đầu sách</th><th class="p-3">Thao tác</th></tr></thead>
+                        <tbody id="cn-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="cn-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 class="text-lg font-bold mb-4" id="cn-modal-title">Thêm chuyên ngành</h3>
+                        <form id="cn-form" class="space-y-4">
+                            <input type="hidden" id="cn-id">
+                            <div><label class="block text-sm mb-1">Tên chuyên ngành</label><input type="text" id="cn-name" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Mô tả</label><textarea id="cn-desc" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"></textarea></div>
+                            <div class="flex justify-end gap-2 mt-6"><button type="button" onclick="closeModal('cn-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button><button type="submit" class="px-4 py-2 bg-primary text-white rounded">Lưu</button></div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initChuyenNganhEvents() {
+            filterChuyenNganh();
+            document.getElementById('cn-form').onsubmit = (e) => {
+                e.preventDefault();
+                const id = document.getElementById('cn-id').value;
+                const data = { tenChuyenNganh: document.getElementById('cn-name').value, moTa: document.getElementById('cn-desc').value };
+                if (id) {
+                    const idx = state.chuyenNganh.findIndex(c => c.maChuyenNganh === id);
+                    state.chuyenNganh[idx] = { ...state.chuyenNganh[idx], ...data };
+                    showToast('Cập nhật thành công');
+                } else {
+                    data.maChuyenNganh = generateId('CN', state.chuyenNganh, 'maChuyenNganh');
+                    state.chuyenNganh.push(data);
+                    showToast('Thêm thành công');
+                }
+                saveData(); closeModal('cn-modal'); filterChuyenNganh();
+            };
+        }
+
+        function filterChuyenNganh() {
+            const tbody = document.getElementById('cn-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = state.chuyenNganh.map(c => {
+                const count = state.dauSach.filter(d => d.maChuyenNganh === c.maChuyenNganh).length;
+                return `
+                    <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="p-3">${c.maChuyenNganh}</td><td class="p-3">${c.tenChuyenNganh}</td><td class="p-3">${c.moTa}</td><td class="p-3">${count}</td>
+                        <td class="p-3">
+                            <button onclick="editChuyenNganh('${c.maChuyenNganh}')" class="text-blue-500 hover:text-blue-700 mr-2"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteChuyenNganh('${c.maChuyenNganh}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function editChuyenNganh(id) {
+            const c = state.chuyenNganh.find(x => x.maChuyenNganh === id);
+            document.getElementById('cn-modal-title').innerText = 'Sửa chuyên ngành';
+            document.getElementById('cn-id').value = c.maChuyenNganh;
+            document.getElementById('cn-name').value = c.tenChuyenNganh;
+            document.getElementById('cn-desc').value = c.moTa;
+            openModal('cn-modal');
+        }
+
+        function deleteChuyenNganh(id) {
+            if (state.dauSach.some(d => d.maChuyenNganh === id)) return showToast('Không thể xóa chuyên ngành đã có sách', 'error');
+            confirmDialog('Bạn có chắc muốn xóa chuyên ngành này?', () => {
+                state.chuyenNganh = state.chuyenNganh.filter(c => c.maChuyenNganh !== id);
+                saveData(); filterChuyenNganh(); showToast('Đã xóa chuyên ngành');
+            });
+        }
+
+        function renderSach() {
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Quản lý Sách</h2>
+                    <button onclick="openModal('sach-modal')" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-800"><i class="fas fa-plus mr-2"></i>Thêm đầu sách</button>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6 flex gap-4">
+                    <input type="text" id="search-sach" placeholder="Tìm kiếm tên sách, tác giả..." class="flex-1 px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" oninput="filterSach()">
+                    <select id="filter-cn" class="px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" onchange="filterSach()">
+                        <option value="">Tất cả chuyên ngành</option>
+                        ${state.chuyenNganh.map(c => `<option value="${c.maChuyenNganh}">${c.tenChuyenNganh}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-3">Mã</th><th class="p-3">Tên sách</th><th class="p-3">Tác giả</th><th class="p-3">Chuyên ngành</th><th class="p-3">Số lượng</th><th class="p-3">Có sẵn</th><th class="p-3">Thao tác</th></tr></thead>
+                        <tbody id="sach-tbody"></tbody>
+                    </table>
+                </div>
+                ${renderSachModal()}
+                ${renderBanSaoModal()}
+            `;
+        }
+
+        function renderSachModal() {
+            return `
+                <div id="sach-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h3 class="text-lg font-bold mb-4" id="sach-modal-title">Thêm đầu sách</h3>
+                        <form id="sach-form" class="grid grid-cols-2 gap-4">
+                            <input type="hidden" id="s-id">
+                            <div class="col-span-2"><label class="block text-sm mb-1">Tên sách</label><input type="text" id="s-name" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Tác giả</label><input type="text" id="s-author" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Nhà xuất bản</label><input type="text" id="s-pub" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Năm xuất bản</label><input type="number" id="s-year" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Số trang</label><input type="number" id="s-pages" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Kích thước</label><input type="text" id="s-size" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div>
+                                <label class="block text-sm mb-1">Chuyên ngành</label>
+                                <select id="s-cn" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required>
+                                    ${state.chuyenNganh.map(c => `<option value="${c.maChuyenNganh}">${c.tenChuyenNganh}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-span-2"><label class="block text-sm mb-1">Mô tả</label><textarea id="s-desc" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"></textarea></div>
+                            <div class="col-span-2 flex justify-end gap-2 mt-4">
+                                <button type="button" onclick="closeModal('sach-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button>
+                                <button type="submit" class="px-4 py-2 bg-primary text-white rounded">Lưu</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderBanSaoModal() {
+            return `
+                <div id="bansao-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold">Quản lý Bản sao - <span id="bs-book-title"></span></h3>
+                            <button onclick="closeModal('bansao-modal')" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="mb-4 flex gap-2">
+                            <button onclick="addBanSao()" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"><i class="fas fa-plus mr-1"></i>Thêm bản sao</button>
+                        </div>
+                        <table class="w-full text-left border-collapse">
+                            <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-2">Mã BS</th><th class="p-2">Ngày nhập</th><th class="p-2">Tình trạng</th><th class="p-2">Ghi chú</th><th class="p-2">Thao tác</th></tr></thead>
+                            <tbody id="bs-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        let currentBookIdForBs = null;
+
+        function initSachEvents() {
+            filterSach();
+            document.getElementById('sach-form').onsubmit = (e) => {
+                e.preventDefault();
+                const id = document.getElementById('s-id').value;
+                const data = {
+                    tenDauSach: document.getElementById('s-name').value, tacGia: document.getElementById('s-author').value,
+                    nhaXuatBan: document.getElementById('s-pub').value, namXuatBan: parseInt(document.getElementById('s-year').value),
+                    soTrang: parseInt(document.getElementById('s-pages').value), kichThuoc: document.getElementById('s-size').value,
+                    maChuyenNganh: document.getElementById('s-cn').value, moTa: document.getElementById('s-desc').value
+                };
+                if (id) {
+                    const idx = state.dauSach.findIndex(d => d.maDauSach === id);
+                    state.dauSach[idx] = { ...state.dauSach[idx], ...data };
+                    showToast('Cập nhật thành công');
+                } else {
+                    data.maDauSach = generateId('DS', state.dauSach, 'maDauSach');
+                    data.soLuong = 0;
+                    state.dauSach.push(data);
+                    showToast('Thêm thành công');
+                }
+                saveData(); closeModal('sach-modal'); filterSach();
+            };
+        }
+
+        function filterSach() {
+            const q = document.getElementById('search-sach')?.value.toLowerCase() || '';
+            const cn = document.getElementById('filter-cn')?.value || '';
+            const tbody = document.getElementById('sach-tbody');
+            if (!tbody) return;
+            const filtered = state.dauSach.filter(d => 
+                (d.tenDauSach.toLowerCase().includes(q) || d.tacGia.toLowerCase().includes(q) || d.maDauSach.toLowerCase().includes(q)) &&
+                (cn === '' || d.maChuyenNganh === cn)
+            );
+            tbody.innerHTML = filtered.map(d => {
+                const cname = state.chuyenNganh.find(c => c.maChuyenNganh === d.maChuyenNganh)?.tenChuyenNganh || '';
+                const total = state.banSao.filter(b => b.maDauSach === d.maDauSach).length;
+                return `
+                    <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="p-3">${d.maDauSach}</td><td class="p-3 font-medium">${d.tenDauSach}</td><td class="p-3">${d.tacGia}</td>
+                        <td class="p-3">${cname}</td><td class="p-3">${total}</td><td class="p-3 text-green-600 font-bold">${d.soLuong}</td>
+                        <td class="p-3">
+                            <button onclick="manageBanSao('${d.maDauSach}')" class="text-green-500 hover:text-green-700 mr-2" title="Quản lý bản sao"><i class="fas fa-copy"></i></button>
+                            <button onclick="editSach('${d.maDauSach}')" class="text-blue-500 hover:text-blue-700 mr-2"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteSach('${d.maDauSach}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function editSach(id) {
+            const d = state.dauSach.find(x => x.maDauSach === id);
+            document.getElementById('sach-modal-title').innerText = 'Sửa đầu sách';
+            document.getElementById('s-id').value = d.maDauSach;
+            document.getElementById('s-name').value = d.tenDauSach;
+            document.getElementById('s-author').value = d.tacGia;
+            document.getElementById('s-pub').value = d.nhaXuatBan;
+            document.getElementById('s-year').value = d.namXuatBan;
+            document.getElementById('s-pages').value = d.soTrang;
+            document.getElementById('s-size').value = d.kichThuoc;
+            document.getElementById('s-cn').value = d.maChuyenNganh;
+            document.getElementById('s-desc').value = d.moTa;
+            openModal('sach-modal');
+        }
+
+        function deleteSach(id) {
+            if (state.banSao.some(b => b.maDauSach === id)) return showToast('Không thể xóa đầu sách đã có bản sao', 'error');
+            confirmDialog('Bạn có chắc muốn xóa đầu sách này?', () => {
+                state.dauSach = state.dauSach.filter(d => d.maDauSach !== id);
+                saveData(); filterSach(); showToast('Đã xóa đầu sách');
+            });
+        }
+
+        function manageBanSao(id) {
+            currentBookIdForBs = id;
+            const ds = state.dauSach.find(d => d.maDauSach === id);
+            document.getElementById('bs-book-title').innerText = ds.tenDauSach;
+            renderBanSaoList();
+            openModal('bansao-modal');
+        }
+
+        function renderBanSaoList() {
+            const bsList = state.banSao.filter(b => b.maDauSach === currentBookIdForBs);
+            document.getElementById('bs-tbody').innerHTML = bsList.map(b => {
+                const colors = { 'Có sẵn': 'text-green-600', 'Đang mượn': 'text-blue-600', 'Hỏng': 'text-gray-500', 'Mất': 'text-red-600' };
+                return `
+                    <tr class="border-b dark:border-gray-700">
+                        <td class="p-2">${b.maBanSao}</td><td class="p-2">${b.ngayNhap}</td>
+                        <td class="p-2">
+                            <select onchange="updateBanSaoStatus('${b.maBanSao}', this.value)" class="border rounded px-2 py-1 dark:bg-gray-700 ${colors[b.tinhTrang]} font-semibold">
+                                ${['Có sẵn', 'Đang mượn', 'Hỏng', 'Mất'].map(s => `<option value="${s}" ${b.tinhTrang === s ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="p-2"><input type="text" value="${b.ghiChu}" onchange="updateBanSaoNote('${b.maBanSao}', this.value)" class="border rounded px-2 py-1 w-full dark:bg-gray-700"></td>
+                        <td class="p-2">
+                            <button onclick="deleteBanSao('${b.maBanSao}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function addBanSao() {
+            const newBs = {
+                maBanSao: generateId('BS', state.banSao, 'maBanSao'),
+                maDauSach: currentBookIdForBs,
+                tinhTrang: 'Có sẵn',
+                ngayNhap: new Date().toISOString().split('T')[0],
+                ghiChu: ''
+            };
+            state.banSao.push(newBs);
+            saveData(); renderBanSaoList(); filterSach(); showToast('Đã thêm bản sao');
+        }
+
+        function updateBanSaoStatus(id, status) {
+            const bs = state.banSao.find(b => b.maBanSao === id);
+            if (bs.tinhTrang === 'Đang mượn' && status !== 'Đang mượn') return showToast('Sách đang mượn, phải trả sách trước', 'error');
+            bs.tinhTrang = status;
+            saveData(); renderBanSaoList(); filterSach(); showToast('Cập nhật trạng thái thành công');
+        }
+
+        function updateBanSaoNote(id, note) {
+            state.banSao.find(b => b.maBanSao === id).ghiChu = note;
+            saveData(); showToast('Đã lưu ghi chú');
+        }
+
+        function deleteBanSao(id) {
+            const bs = state.banSao.find(b => b.maBanSao === id);
+            if (bs.tinhTrang === 'Đang mượn') return showToast('Không thể xóa bản sao đang mượn', 'error');
+            confirmDialog('Xóa bản sao này?', () => {
+                state.banSao = state.banSao.filter(b => b.maBanSao !== id);
+                saveData(); renderBanSaoList(); filterSach(); showToast('Đã xóa bản sao');
+            });
+        }
+
+        function renderMuonTra() {
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Mượn / Trả sách</h2>
+                    <div class="flex gap-2">
+                        <button onclick="openModal('muon-modal')" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-800"><i class="fas fa-hand-holding mr-2"></i>Cho mượn sách</button>
+                        <button onclick="openModal('tra-modal')" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"><i class="fas fa-undo mr-2"></i>Trả sách</button>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6 flex gap-4">
+                    <input type="text" id="search-pm" placeholder="Tìm mã phiếu, mã độc giả..." class="flex-1 px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" oninput="filterPhieuMuon()">
+                    <select id="filter-pm-status" class="px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" onchange="filterPhieuMuon()">
+                        <option value="">Tất cả trạng thái</option><option value="Đang mượn">Đang mượn</option><option value="Trả trễ">Trả trễ</option><option value="Đã trả">Đã trả</option>
+                    </select>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-3">Mã phiếu</th><th class="p-3">Độc giả</th><th class="p-3">Bản sao</th><th class="p-3">Ngày mượn</th><th class="p-3">Hạn trả</th><th class="p-3">Trạng thái</th></tr></thead>
+                        <tbody id="pm-tbody"></tbody>
+                    </table>
+                </div>
+                ${renderMuonModal()}
+                ${renderTraModal()}
+            `;
+        }
+
+        function renderMuonModal() {
+            return `
+                <div id="muon-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 class="text-lg font-bold mb-4">Tạo phiếu mượn</h3>
+                        <form id="muon-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm mb-1">Mã độc giả</label>
+                                <input type="text" id="m-dg" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required oninput="checkDocGia(this.value)">
+                                <p id="m-dg-name" class="text-sm mt-1 text-gray-500"></p>
+                            </div>
+                            <div>
+                                <label class="block text-sm mb-1">Mã bản sao</label>
+                                <input type="text" id="m-bs" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required oninput="checkBanSao(this.value)">
+                                <p id="m-bs-name" class="text-sm mt-1 text-gray-500"></p>
+                            </div>
+                            <div><label class="block text-sm mb-1">Ghi chú</label><input type="text" id="m-note" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"></div>
+                            <div class="flex justify-end gap-2 mt-6">
+                                <button type="button" onclick="closeModal('muon-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button>
+                                <button type="submit" id="btn-muon" class="px-4 py-2 bg-primary text-white rounded" disabled>Tạo phiếu</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTraModal() {
+            return `
+                <div id="tra-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 class="text-lg font-bold mb-4">Trả sách</h3>
+                        <form id="tra-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm mb-1">Mã phiếu mượn</label>
+                                <input type="text" id="t-pm" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required oninput="checkPhieuTra(this.value)">
+                                <div id="t-pm-info" class="text-sm mt-2 text-gray-500 space-y-1"></div>
+                            </div>
+                            <div class="flex justify-end gap-2 mt-6">
+                                <button type="button" onclick="closeModal('tra-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button>
+                                <button type="submit" id="btn-tra" class="px-4 py-2 bg-green-600 text-white rounded" disabled>Xác nhận trả</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        let isDgValid = false, isBsValid = false, currentTraPm = null;
+
+        function initMuonTraEvents() {
+            filterPhieuMuon();
+            document.getElementById('muon-form').onsubmit = (e) => {
+                e.preventDefault();
+                if (!isDgValid || !isBsValid) return;
+                const dgId = document.getElementById('m-dg').value.trim();
+                const bsId = document.getElementById('m-bs').value.trim();
+                const note = document.getElementById('m-note').value;
+                const today = new Date();
+                const henTra = new Date(today); henTra.setDate(henTra.getDate() + 14);
+                
+                const pm = {
+                    maPhieuMuon: generateId('PM', state.phieuMuon, 'maPhieuMuon'),
+                    maBanSao: bsId, maDocGia: dgId, maNV: state.currentUser.maNV,
+                    ngayMuon: today.toISOString().split('T')[0], ngayHenTra: henTra.toISOString().split('T')[0],
+                    ngayTraThuc: null, tinhTrang: 'Đang mượn', ghiChu: note
+                };
+                state.phieuMuon.push(pm);
+                state.banSao.find(b => b.maBanSao === bsId).tinhTrang = 'Đang mượn';
+                saveData(); closeModal('muon-modal'); filterPhieuMuon(); showToast('Đã tạo phiếu mượn');
+            };
+
+            document.getElementById('tra-form').onsubmit = (e) => {
+                e.preventDefault();
+                if (!currentTraPm) return;
+                const today = new Date().toISOString().split('T')[0];
+                currentTraPm.ngayTraThuc = today;
+                currentTraPm.tinhTrang = 'Đã trả';
+                state.banSao.find(b => b.maBanSao === currentTraPm.maBanSao).tinhTrang = 'Có sẵn';
+                saveData(); closeModal('tra-modal'); filterPhieuMuon(); showToast('Trả sách thành công');
+            };
+        }
+
+        function checkDocGia(id) {
+            const dg = state.docGia.find(d => d.maDocGia === id);
+            const el = document.getElementById('m-dg-name');
+            if (!dg) { el.innerText = 'Không tìm thấy độc giả'; el.className = 'text-sm mt-1 text-red-500'; isDgValid = false; }
+            else if (dg.trangThai !== 'active') { el.innerText = 'Độc giả đang bị khóa'; el.className = 'text-sm mt-1 text-red-500'; isDgValid = false; }
+            else {
+                const unreturned = state.phieuMuon.filter(p => p.maDocGia === id && p.tinhTrang !== 'Đã trả');
+                if (unreturned.length > 0) { el.innerText = `Độc giả đang mượn ${unreturned.length} sách chưa trả`; el.className = 'text-sm mt-1 text-red-500'; isDgValid = false; }
+                else { el.innerText = dg.hoTen; el.className = 'text-sm mt-1 text-green-500'; isDgValid = true; }
+            }
+            updateMuonBtn();
+        }
+
+        function checkBanSao(id) {
+            const bs = state.banSao.find(b => b.maBanSao === id);
+            const el = document.getElementById('m-bs-name');
+            if (!bs) { el.innerText = 'Không tìm thấy bản sao'; el.className = 'text-sm mt-1 text-red-500'; isBsValid = false; }
+            else if (bs.tinhTrang !== 'Có sẵn') { el.innerText = `Bản sao không có sẵn (${bs.tinhTrang})`; el.className = 'text-sm mt-1 text-red-500'; isBsValid = false; }
+            else {
+                const ds = state.dauSach.find(d => d.maDauSach === bs.maDauSach);
+                el.innerText = ds ? ds.tenDauSach : ''; el.className = 'text-sm mt-1 text-green-500'; isBsValid = true;
+            }
+            updateMuonBtn();
+        }
+
+        function updateMuonBtn() { document.getElementById('btn-muon').disabled = !(isDgValid && isBsValid); }
+
+        function checkPhieuTra(id) {
+            const pm = state.phieuMuon.find(p => p.maPhieuMuon === id);
+            const el = document.getElementById('t-pm-info');
+            const btn = document.getElementById('btn-tra');
+            if (!pm) { el.innerHTML = '<span class="text-red-500">Không tìm thấy phiếu mượn</span>'; btn.disabled = true; currentTraPm = null; return; }
+            if (pm.tinhTrang === 'Đã trả') { el.innerHTML = '<span class="text-red-500">Phiếu này đã được trả</span>'; btn.disabled = true; currentTraPm = null; return; }
+            
+            const dg = state.docGia.find(d => d.maDocGia === pm.maDocGia)?.hoTen || pm.maDocGia;
+            const ds = state.dauSach.find(d => d.maDauSach === state.banSao.find(b => b.maBanSao === pm.maBanSao)?.maDauSach)?.tenDauSach || pm.maBanSao;
+            const today = new Date();
+            const henTra = new Date(pm.ngayHenTra);
+            const isLate = today > henTra;
+            const lateDays = isLate ? Math.floor((today - henTra) / (1000 * 60 * 60 * 24)) : 0;
+            
+            el.innerHTML = `
+                <p><strong>Độc giả:</strong> ${dg}</p>
+                <p><strong>Sách:</strong> ${ds} (${pm.maBanSao})</p>
+                <p><strong>Ngày mượn:</strong> ${pm.ngayMuon}</p>
+                <p><strong>Hạn trả:</strong> ${pm.ngayHenTra}</p>
+                ${isLate ? `<p class="text-red-500 font-bold">Trễ hạn: ${lateDays} ngày</p>` : '<p class="text-green-500">Đúng hạn</p>'}
+            `;
+            currentTraPm = pm;
+            btn.disabled = false;
+        }
+
+        function filterPhieuMuon() {
+            const q = document.getElementById('search-pm')?.value.toLowerCase() || '';
+            const status = document.getElementById('filter-pm-status')?.value || '';
+            const tbody = document.getElementById('pm-tbody');
+            if (!tbody) return;
+            
+            // Auto update overdue status
+            const today = new Date();
+            let changed = false;
+            state.phieuMuon.forEach(p => {
+                if (p.tinhTrang === 'Đang mượn' && new Date(p.ngayHenTra) < today) { p.tinhTrang = 'Trả trễ'; changed = true; }
+            });
+            if (changed) saveData();
+
+            const filtered = state.phieuMuon.filter(p => 
+                (p.maPhieuMuon.toLowerCase().includes(q) || p.maDocGia.toLowerCase().includes(q)) &&
+                (status === '' || p.tinhTrang === status)
+            ).sort((a, b) => new Date(b.ngayMuon) - new Date(a.ngayMuon));
+
+            tbody.innerHTML = filtered.map(p => {
+                const dg = state.docGia.find(d => d.maDocGia === p.maDocGia)?.hoTen || p.maDocGia;
+                const colors = { 'Đang mượn': 'bg-blue-100 text-blue-800', 'Trả trễ': 'bg-red-100 text-red-800', 'Đã trả': 'bg-green-100 text-green-800' };
+                return `
+                    <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="p-3">${p.maPhieuMuon}</td><td class="p-3">${dg}</td><td class="p-3">${p.maBanSao}</td>
+                        <td class="p-3">${p.ngayMuon}</td><td class="p-3">${p.ngayHenTra}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded text-xs ${colors[p.tinhTrang]}">${p.tinhTrang}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderBaoCao() {
+            return `
+                <h2 class="text-2xl font-bold mb-6">Báo cáo Thống kê</h2>
+                <div class="space-y-6">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold">1. Sách được mượn nhiều nhất</h3>
+                            <button onclick="window.print()" class="text-gray-500 hover:text-gray-700"><i class="fas fa-print"></i></button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-2">Tên sách</th><th class="p-2">Tác giả</th><th class="p-2">Lượt mượn</th></tr></thead>
+                                <tbody id="bc-top-sach"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold">2. Độc giả chưa trả sách (Quá hạn)</h3>
+                            <button onclick="window.print()" class="text-gray-500 hover:text-gray-700"><i class="fas fa-print"></i></button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-2">Mã ĐG</th><th class="p-2">Họ tên</th><th class="p-2">Sách mượn</th><th class="p-2">Hạn trả</th><th class="p-2">Số ngày trễ</th></tr></thead>
+                                <tbody id="bc-qua-han"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initBaoCaoEvents() {
+            // Top sách
+            const bookCounts = {};
+            state.phieuMuon.forEach(p => {
+                const bs = state.banSao.find(b => b.maBanSao === p.maBanSao);
+                if (bs) {
+                    bookCounts[bs.maDauSach] = (bookCounts[bs.maDauSach] || 0) + 1;
+                }
+            });
+            const topBooks = Object.entries(bookCounts)
+                .map(([id, count]) => ({ ds: state.dauSach.find(d => d.maDauSach === id), count }))
+                .filter(x => x.ds)
+                .sort((a, b) => b.count - a.count).slice(0, 10);
+            
+            document.getElementById('bc-top-sach').innerHTML = topBooks.map(b => `
+                <tr class="border-b dark:border-gray-700">
+                    <td class="p-2">${b.ds.tenDauSach}</td><td class="p-2">${b.ds.tacGia}</td><td class="p-2 font-bold">${b.count}</td>
+                </tr>
+            `).join('');
+
+            // Quá hạn
+            const today = new Date();
+            const overdue = state.phieuMuon.filter(p => p.tinhTrang === 'Trả trễ' || (p.tinhTrang === 'Đang mượn' && new Date(p.ngayHenTra) < today));
+            const overdueData = overdue.map(p => {
+                const dg = state.docGia.find(d => d.maDocGia === p.maDocGia);
+                const ds = state.dauSach.find(d => d.maDauSach === state.banSao.find(b => b.maBanSao === p.maBanSao)?.maDauSach);
+                const days = Math.floor((today - new Date(p.ngayHenTra)) / (1000 * 60 * 60 * 24));
+                return { p, dg, ds, days };
+            }).sort((a, b) => b.days - a.days);
+
+            document.getElementById('bc-qua-han').innerHTML = overdueData.map(x => `
+                <tr class="border-b dark:border-gray-700 ${x.days > 0 ? 'bg-red-50 dark:bg-red-900/20' : ''}">
+                    <td class="p-2">${x.dg?.maDocGia || ''}</td><td class="p-2">${x.dg?.hoTen || ''}</td>
+                    <td class="p-2">${x.ds?.tenDauSach || ''}</td><td class="p-2">${x.p.ngayHenTra}</td>
+                    <td class="p-2 text-red-600 font-bold">${x.days > 0 ? x.days : 0}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderUsers() {
+            if (state.currentUser.role !== 'admin') return '<h2>Không có quyền truy cập</h2>';
+            return `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold">Quản lý Người dùng</h2>
+                    <button onclick="openModal('user-modal')" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-800"><i class="fas fa-plus mr-2"></i>Thêm người dùng</button>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-100 dark:bg-gray-700 border-b dark:border-gray-600"><th class="p-3">Mã NV</th><th class="p-3">Họ tên</th><th class="p-3">Username</th><th class="p-3">Vai trò</th><th class="p-3">Trạng thái</th><th class="p-3">Thao tác</th></tr></thead>
+                        <tbody id="user-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="user-modal" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 class="text-lg font-bold mb-4" id="user-modal-title">Thêm người dùng</h3>
+                        <form id="user-form" class="space-y-4">
+                            <input type="hidden" id="u-id">
+                            <div><label class="block text-sm mb-1">Họ tên</label><input type="text" id="u-name" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Username</label><input type="text" id="u-user" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Password</label><input type="password" id="u-pass" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600" required></div>
+                            <div><label class="block text-sm mb-1">Vai trò</label><select id="u-role" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"><option value="thuthu">Thủ thư</option><option value="admin">Admin</option></select></div>
+                            <div><label class="block text-sm mb-1">Trạng thái</label><select id="u-status" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600"><option value="active">Hoạt động</option><option value="inactive">Khóa</option></select></div>
+                            <div class="flex justify-end gap-2 mt-6"><button type="button" onclick="closeModal('user-modal')" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded">Hủy</button><button type="submit" class="px-4 py-2 bg-primary text-white rounded">Lưu</button></div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initUsersEvents() {
+            if (state.currentUser.role !== 'admin') return;
+            filterUsers();
+            document.getElementById('user-form').onsubmit = (e) => {
+                e.preventDefault();
+                const id = document.getElementById('u-id').value;
+                const user = document.getElementById('u-user').value;
+                if (!id && state.users.some(u => u.username === user)) return showToast('Username đã tồn tại', 'error');
+                
+                const data = {
+                    hoTen: document.getElementById('u-name').value, username: user,
+                    password: document.getElementById('u-pass').value, role: document.getElementById('u-role').value,
+                    trangThai: document.getElementById('u-status').value
+                };
+                if (id) {
+                    const idx = state.users.findIndex(u => u.maNV === id);
+                    state.users[idx] = { ...state.users[idx], ...data };
+                    showToast('Cập nhật thành công');
+                } else {
+                    data.maNV = generateId('NV', state.users, 'maNV');
+                    state.users.push(data);
+                    showToast('Thêm thành công');
+                }
+                saveData(); closeModal('user-modal'); filterUsers();
+            };
+        }
+
+        function filterUsers() {
+            const tbody = document.getElementById('user-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = state.users.map(u => `
+                <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="p-3">${u.maNV}</td><td class="p-3">${u.hoTen}</td><td class="p-3">${u.username}</td>
+                    <td class="p-3">${u.role === 'admin' ? 'Admin' : 'Thủ thư'}</td>
+                    <td class="p-3"><span class="px-2 py-1 rounded text-xs ${u.trangThai === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${u.trangThai === 'active' ? 'Hoạt động' : 'Khóa'}</span></td>
+                    <td class="p-3">
+                        <button onclick="editUser('${u.maNV}')" class="text-blue-500 hover:text-blue-700 mr-2"><i class="fas fa-edit"></i></button>
+                        ${u.maNV !== state.currentUser.maNV ? `<button onclick="deleteUser('${u.maNV}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function editUser(id) {
+            const u = state.users.find(x => x.maNV === id);
+            document.getElementById('user-modal-title').innerText = 'Sửa người dùng';
+            document.getElementById('u-id').value = u.maNV;
+            document.getElementById('u-name').value = u.hoTen;
+            document.getElementById('u-user').value = u.username;
+            document.getElementById('u-pass').value = u.password;
+            document.getElementById('u-role').value = u.role;
+            document.getElementById('u-status').value = u.trangThai;
+            openModal('user-modal');
+        }
+
+        function deleteUser(id) {
+            if (id === state.currentUser.maNV) return showToast('Không thể xóa tài khoản của chính mình', 'error');
+            confirmDialog('Bạn có chắc muốn xóa người dùng này?', () => {
+                state.users = state.users.filter(u => u.maNV !== id);
+                saveData(); filterUsers(); showToast('Đã xóa người dùng');
+            });
+        }
+
+        // --- APP INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            render('login');
+        });
+    </script>
+</body>
+</html>
