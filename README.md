@@ -113,7 +113,8 @@ Mở trình duyệt tại `http://localhost:3000`
 | Chart.js (CDN) | Biểu đồ thống kê |
 | Font Awesome | Icon |
 | localStorage | Lưu trữ dữ liệu client-side |
-| Google AI Studio (Gemini 2.5 Pro) | Sinh code từ prompt |
+| Google AI Studio (Gemini 3.1 Pro) |
+| Qwen Plus 3.5|
 | Claude (Anthropic) | Phân tích yêu cầu & viết prompt |
 | Vite + React + TypeScript | Build tooling |
 
