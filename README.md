@@ -10,7 +10,7 @@
 
 **Ứng dụng web quản lý thư viện trường Đại học — xây dựng bằng Vibe Coding với Google AI Studio**
 
-[ Demo trực tiếp](http://127.0.0.1:5500/index.html ) · [ Báo cáo](#) · [ Báo lỗi](../../issues)
+[Demo trực tiếp](https://jaydenb127.github.io/Management-library-system-vibe-coding2) · [ Báo cáo](#) · [ Báo lỗi](../../issues)
 
 </div>
 
