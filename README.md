@@ -1,4 +1,4 @@
-# 📚 Hệ thống Quản lý Thư viện Đại học
+#  Hệ thống Quản lý Thư viện Đại học
 
 <div align="center">
 
@@ -16,7 +16,7 @@
 
 ---
 
-## 📖 Giới thiệu
+##  Giới thiệu
 
 Đây là bài tập **Vibe Coding 2** — xây dựng hệ thống quản lý thư viện đại học hoàn chỉnh bằng cách sử dụng AI tools (Google AI Studio - Gemini 2.5 Pro & Claude) để sinh code từ prompt kỹ thuật.
 
@@ -24,9 +24,9 @@
 
 ---
 
-## ✨ Tính năng
+##  Tính năng
 
-### 🔐 Xác thực & Phân quyền
+###  Xác thực & Phân quyền
 - Đăng nhập với 2 vai trò: **Admin** và **Thủ thư**
 - Phân quyền giao diện theo vai trò (Admin thấy đầy đủ chức năng)
 
@@ -36,17 +36,17 @@
 - In thẻ thư viện
 - Xem lịch sử mượn trả
 
-### 📚 Quản lý Sách
+###  Quản lý Sách
 - Quản lý đầu sách (thêm, sửa, xóa) theo chuyên ngành
 - Quản lý bản sao từng đầu sách với trạng thái thời gian thực
 - Tìm kiếm theo tên sách, tác giả, nhà xuất bản
 
-### 🔄 Quản lý Mượn / Trả
+###  Quản lý Mượn / Trả
 - Tạo phiếu mượn với kiểm tra ràng buộc nghiệp vụ
 - Xử lý trả sách, tự động tính ngày trễ hạn
 - Danh sách phiếu mượn với lọc và tìm kiếm
 
-### 📊 Báo cáo thống kê
+###  Báo cáo thống kê
 - Top đầu sách được mượn nhiều nhất (biểu đồ)
 - Danh sách độc giả chưa trả sách
 - Dashboard tổng quan với số liệu realtime
@@ -55,7 +55,7 @@
 - Thêm, sửa, xóa tài khoản thủ thư
 - Kích hoạt / khóa tài khoản
 
-### 🎨 UI/UX
+### UI/UX
 - Dark / Light mode
 - Responsive (mobile, tablet, desktop)
 - Toast notifications
@@ -63,7 +63,7 @@
 
 ---
 
-## 🚀 Chạy ứng dụng
+## Chạy ứng dụng
 
 ### Cách 1: Mở trực tiếp (đơn giản nhất)
 ```bash
@@ -95,7 +95,7 @@ Mở trình duyệt tại `http://localhost:3000`
 
 ---
 
-## 🔑 Tài khoản mặc định
+## Tài khoản mặc định
 
 | Vai trò | Username | Password |
 |---------|----------|----------|
