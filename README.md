@@ -10,7 +10,7 @@
 
 **Ứng dụng web quản lý thư viện trường Đại học — xây dựng bằng Vibe Coding với Google AI Studio**
 
-[🚀 Demo trực tiếp](https://your-username.github.io/library-management) · [📋 Báo cáo](#) · [🐛 Báo lỗi](../../issues)
+[ Demo trực tiếp](http://127.0.0.1:5500/index.html ) · [ Báo cáo](#) · [ Báo lỗi](../../issues)
 
 </div>
 
@@ -30,7 +30,7 @@
 - Đăng nhập với 2 vai trò: **Admin** và **Thủ thư**
 - Phân quyền giao diện theo vai trò (Admin thấy đầy đủ chức năng)
 
-### 👥 Quản lý Độc giả
+###  Quản lý Độc giả
 - Đăng ký, sửa, xóa thẻ thư viện sinh viên
 - Tìm kiếm & lọc theo lớp, giới tính, trạng thái
 - In thẻ thư viện
@@ -104,7 +104,7 @@ Mở trình duyệt tại `http://localhost:3000`
 
 ---
 
-## 🛠️ Công nghệ sử dụng
+##  Công nghệ sử dụng
 
 | Công nghệ | Mục đích |
 |-----------|----------|
@@ -119,7 +119,7 @@ Mở trình duyệt tại `http://localhost:3000`
 
 ---
 
-## 📁 Cấu trúc dự án
+##  Cấu trúc dự án
 
 ```
 library-management/
@@ -138,7 +138,7 @@ library-management/
 
 ---
 
-## 📐 Mô hình dữ liệu
+##  Mô hình dữ liệu
 
 ```
 Users ──────────────── PhieuMuon
@@ -152,7 +152,7 @@ Dữ liệu được lưu trong `localStorage` với key `lib_sys_data`, tự đ
 
 ---
 
-## 👨‍💻 Nhóm thực hiện
+##  Nhóm thực hiện
 
 | STT | Họ tên | MSSV | Vai trò |
 |-----|--------|------|---------|
@@ -163,7 +163,7 @@ Dữ liệu được lưu trong `localStorage` với key `lib_sys_data`, tự đ
 
 ---
 
-## 📋 Quy trình Vibe Coding
+##  Quy trình Vibe Coding
 
 ```
 1. Đọc & phân tích đề bài
@@ -183,6 +183,6 @@ Dữ liệu được lưu trong `localStorage` với key `lib_sys_data`, tự đ
 
 ---
 
-## 📄 License
+##  License
 
 MIT License — Bài tập học thuật, vui lòng không sử dụng cho mục đích thương mại.
