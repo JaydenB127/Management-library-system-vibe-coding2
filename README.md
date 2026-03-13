@@ -173,7 +173,7 @@ Dữ liệu được lưu trong `localStorage` với key `lib_sys_data`, tự đ
         ↓
 3. Viết prompt kỹ thuật chi tiết (với Claude)
         ↓
-4. Sinh code MVP với Google AI Studio (Gemini 2.5 Pro)
+4. Sinh code MVP với Google AI Studio (Gemini 3.1 Pro)
         ↓
 5. Kiểm thử từng chức năng trên trình duyệt
         ↓
