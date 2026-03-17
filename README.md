@@ -158,9 +158,9 @@ Dữ liệu được lưu trong `localStorage` với key `lib_sys_data`, tự đ
 | STT | Họ tên | MSSV | Vai trò |
 |-----|--------|------|---------|
 | 1 | Bùi Thành Đạt | 23724811| Nhóm trưởng |
-| 2 | [Thành viên 2] | [MSSV] | Thành viên |
-| 3 | [Thành viên 3] | [MSSV] | Thành viên |
-| 4 | [Thành viên 4] | [MSSV] | Thành viên |
+| 2 | La Thiên Bảo| 23723801 | Thành viên |
+| 3 | Lê Ngọc Huy | 23727381 | Thành viên |
+| 4 | Bùi Huy Bảo | 23720161 | Thành viên |
 
 ---
 
